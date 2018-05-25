@@ -336,6 +336,12 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		double meanHU=0, stdHU=0;
 		int maxHU=-2000, minHU=2000;
 	//	int maxpixel = -1 , minpixel = 256;
+		for (int i = 0; i < setzMin; i++){
+			NoduleTag_Res[i].setTo(0);
+		}
+		for (int i = setzMax + 1; i < NoduleTag_Res.size(); i++){
+			NoduleTag_Res[i].setTo(0);
+		}
 		entropy = CalEntropy3D(img3D, NoduleTag_Res);
 		maocidu = CalMaocidu(resizedImg);
 
@@ -347,10 +353,15 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		vector<int> SolidVolumeHistogram;
 		double volSolid, solidPercent;//solidPercent实性度
 		vector<int> useLabel;//连通域分析出来的label
+		double diversity;//实性联通分支离散程度
+		vector<double> roiXYZDim;
+		roiXYZDim.push_back(setxMax - setxMin + 1);
+		roiXYZDim.push_back(setyMax - setyMin + 1);
+		roiXYZDim.push_back(setzMax - setzMin + 1);
 
 		solidNodule(NoduleTag_Res, img3D, solid);
 		icvprCcaByTwoPass3D(solid, solidConnect, useLabel);
-		SolidConnectHuProperty = getSolidConnectHuProperty(solidConnect, NoduleTag_Res, useLabel);
+		SolidConnectHuProperty = getSolidConnectHuDiversityProperty(solidConnect, NoduleTag_Res, useLabel, roiXYZDim, diversity);
 		SolidConnectVolumeProperty = getSolidConnectVolumeProperty(solidConnect, useLabel, dxVoxel, dyVoxel, dzVoxel);
 
 		double xaxis[5] = {0,50, 100, 150, 200};

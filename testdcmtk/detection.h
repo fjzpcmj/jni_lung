@@ -95,7 +95,8 @@ void arrrayToMat(jint* arrray, vector<cv::Mat> &output, int roix, int roiy, int 
 void solidNodule(vector<cv::Mat> &maskVector, vector<cv::Mat> &imgVector, vector<cv::Mat> &dst);
 void icvprCcaByTwoPass3D(const vector<cv::Mat>& _binImg, vector<cv::Mat>& _lableImg, vector<int> &useLabel);
 void FindSolid(vector<cv::Mat>& _lableImg, int &maxlabel);
-vector<vector<double>> getSolidConnectHuProperty(vector<cv::Mat>& connectLabel, vector<cv::Mat>& origin, vector<int> &useLabel);
+vector<vector<double>> getSolidConnectHuDiversityProperty(vector<cv::Mat>& connectLabel, vector<cv::Mat>& origin
+	, vector<int> &useLabel, vector<double> roiXYZDim, double &outputDiversity);
 vector<double> getSolidConnectVolumeProperty(vector<cv::Mat>& connectLabel, vector<int> &useLabel,
 	double dxVoxel, double dyVoxel, double dzVoxel);
 vector<int> getSolidVolumeHistogram(vector<double> solidConnectVolumeProperty, vector<double> xAxis);

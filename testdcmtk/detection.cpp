@@ -2303,8 +2303,11 @@ void FindSolid(vector<cv::Mat>& _lableImg, int &maxlabel){
 	}
 }
 
-vector<vector<double>> getSolidConnectHuProperty(vector<cv::Mat>& connectLabel, vector<cv::Mat>& origin, vector<int> &useLabel){
+//输出每个联通分支的meanHU,stdHU ，还有离散程度diversity
+vector<vector<double>> getSolidConnectHuDiversityProperty(vector<cv::Mat>& connectLabel, vector<cv::Mat>& origin
+	, vector<int> &useLabel, vector<double> roiXYZDim ,double &outputDiversity){
 	vector<vector<int>> hu(useLabel.size());
+	vector<vector<double>> ConnectXYZ(useLabel.size());
 	//for (int i = 0; i < solidCon_num; i++){
 	//	vector<int> temp;
 	//	hu.push_back(temp);
@@ -2323,6 +2326,9 @@ vector<vector<double>> getSolidConnectHuProperty(vector<cv::Mat>& connectLabel, 
 					if (it != useLabel.end()){
 						index = distance(useLabel.begin(), it);
 						hu[index].push_back(origin[z].at<uchar>(i, j));
+						ConnectXYZ[index].push_back(j);
+						ConnectXYZ[index].push_back(i);
+						ConnectXYZ[index].push_back(z);
 					}
 
 				}
@@ -2332,25 +2338,65 @@ vector<vector<double>> getSolidConnectHuProperty(vector<cv::Mat>& connectLabel, 
 	double slope = double(WindowsWidth) / 255;
 	double bias = double(WindowsCenter) - double(WindowsWidth) / 2;
 	vector<vector<double>> huProperty;
+	vector<vector<double>> DiversityProperty;
 	for (int connect = 0; connect < useLabel.size(); connect++){
 		vector<double> oneHuProperty;
+		vector<double> oneDiversity;
 		double meanHU = 0, stdHU = 0;
+		double meanX = 0, meanY = 0,meanZ = 0;
 		if (hu[connect].size() != 0){
 			for (int i = 0; i < hu[connect].size(); i++){
 				meanHU = meanHU + hu[connect][i];
+				meanX = meanX + ConnectXYZ[connect][i * 3 + 0];
+				meanY = meanY + ConnectXYZ[connect][i * 3 + 1];
+				meanZ = meanZ + ConnectXYZ[connect][i * 3 + 2];
 			}
 			meanHU = meanHU / hu[connect].size();
+			meanX = 3 * meanX / hu[connect].size();
+			meanY = 3 * meanY / hu[connect].size();
+			meanZ = 3 * meanZ / hu[connect].size();
 			for (int i = 0; i < hu[connect].size(); i++){
 				stdHU = stdHU + (hu[connect][i] - meanHU)*(hu[connect][i] - meanHU);
+				//stdX = stdX + (ConnectXYZ[connect][i * 3 + 0] - meanX)*(ConnectXYZ[connect][i * 3 + 0] - meanX);				
+				//stdY = stdY + (ConnectXYZ[connect][i * 3 + 1] - meanY)*(ConnectXYZ[connect][i * 3 + 1] - meanY);
+				//stdZ = stdZ + (ConnectXYZ[connect][i * 3 + 2] - meanZ)*(ConnectXYZ[connect][i * 3 + 2] - meanZ);
 			}
 			stdHU = sqrt(stdHU / hu[connect].size());
+			//stdX = sqrt(3*stdX / ConnectXYZ[connect].size());
+			//stdY = sqrt(3 * stdY / ConnectXYZ[connect].size());
+			//stdZ = sqrt(3 * stdZ / ConnectXYZ[connect].size());
 			meanHU = slope*meanHU + bias;
 			stdHU = slope*stdHU;
 		}
 		oneHuProperty.push_back(meanHU);
 		oneHuProperty.push_back(stdHU);
 		huProperty.push_back(oneHuProperty);
+		oneDiversity.push_back(meanX);
+		oneDiversity.push_back(meanY);
+		oneDiversity.push_back(meanZ);
+		DiversityProperty.push_back(oneDiversity);
 	}
+	double DiversityX = 0, DiversityY = 0, DiversityZ = 0;
+	double xx = 0, yy = 0, zz = 0;
+	if (DiversityProperty.size() != 0){
+		for (int i = 0; i < DiversityProperty.size(); i++){
+			DiversityX = DiversityX + DiversityProperty[i][0];
+			DiversityY = DiversityY + DiversityProperty[i][1];
+			DiversityZ = DiversityZ + DiversityProperty[i][2];
+		}
+		DiversityX = DiversityX / DiversityProperty.size();
+		DiversityY = DiversityY / DiversityProperty.size();
+		DiversityZ = DiversityZ / DiversityProperty.size();
+		for (int i = 0; i < DiversityProperty.size(); i++){
+			xx = xx + (DiversityProperty[i][0] - DiversityX)*(DiversityProperty[i][0] - DiversityX);
+			yy = yy + (DiversityProperty[i][1] - DiversityY)*(DiversityProperty[i][1] - DiversityY);
+			zz = zz + (DiversityProperty[i][2] - DiversityZ)*(DiversityProperty[i][2] - DiversityZ);
+		}
+		xx = sqrt(xx / DiversityProperty.size());
+		yy = sqrt(yy / DiversityProperty.size());
+		zz = sqrt(zz / DiversityProperty.size());
+	}
+	outputDiversity = (xx / roiXYZDim[0] + yy / roiXYZDim[1] + zz / roiXYZDim[2]) / 3.0;
 	return huProperty;
 }
 
