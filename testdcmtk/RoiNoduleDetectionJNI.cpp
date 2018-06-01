@@ -11,6 +11,9 @@
 using namespace std;
 //using namespace cv;
 char * JStringToCharArray(JNIEnv * pJNIEnv, jstring jstr);
+jdoubleArray vector2jdoubleArray(JNIEnv * env, vector<double> vec);
+jintArray vector2jintArray(JNIEnv * env, vector<int> vec);
+jobjectArray vector2objectArray(JNIEnv * env, vector<vector<double>> vec);
 /*
 * Class:     com_navitek_jni_RoiNoduleDetection
 * Method:    SemiAutoLungNodulesDetection
@@ -330,8 +333,8 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		cout << "surface" << sur << endl;
 
 		
-		double setLobeIndex, setMinHU, setMaxHU, setMean, setSum, setStd, setMaxHUHist, setArea = 0, setVolume = 0, setCompactness;
-		int setRoundness, setMaxDiameter, setCountHistMaxPos, setHistogramNorm, setNoduleType;
+		double setLobeIndex, setMinHU, setMaxHU, setMean, setSum, setStd, setMaxHUHist, setArea = 0, setVolume = 0;
+		//int setRoundness, setMaxDiameter, setCountHistMaxPos, setHistogramNorm, setNoduleType;
 		double entropy, maocidu;
 		double meanHU=0, stdHU=0;
 		int maxHU=-2000, minHU=2000;
@@ -348,12 +351,12 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		vector<cv::Mat> solid;//255为实性部分,vector大小为setzMax-setzMin+1
 		vector<cv::Mat> resizedDst;
 		vector<cv::Mat> solidConnect;//实性连通区域，label=1,2,3...
-		vector<vector<double>> SolidConnectHuProperty;
-		vector<double> SolidConnectVolumeProperty;
-		vector<int> SolidVolumeHistogram;
+		vector<vector<double>> solidConnectHuProperty;//每个实性联通区域的meanhu,stdHU
+		vector<double> solidConnectVolumeProperty;//每个实性联通区域的体积
+		vector<int> solidVolumeHistogram;//实性联通区域的体积直方图
 		double volSolid, solidPercent;//solidPercent实性度
 		vector<int> useLabel;//连通域分析出来的label
-		double diversity;//实性联通分支离散程度
+		double solidDiversity;//实性联通分支离散程度
 		vector<double> roiXYZDim;
 		roiXYZDim.push_back(setxMax - setxMin + 1);
 		roiXYZDim.push_back(setyMax - setyMin + 1);
@@ -361,20 +364,18 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 
 		solidNodule(NoduleTag_Res, img3D, solid);
 		icvprCcaByTwoPass3D(solid, solidConnect, useLabel);
-		SolidConnectHuProperty = getSolidConnectHuDiversityProperty(solidConnect, NoduleTag_Res, useLabel, roiXYZDim, diversity);
-		SolidConnectVolumeProperty = getSolidConnectVolumeProperty(solidConnect, useLabel, dxVoxel, dyVoxel, dzVoxel);
+		solidConnectHuProperty = getSolidConnectHuDiversityProperty(solidConnect, NoduleTag_Res, useLabel, roiXYZDim, solidDiversity);
+		solidConnectVolumeProperty = getSolidConnectVolumeProperty(solidConnect, useLabel, dxVoxel, dyVoxel, dzVoxel);
 
-		double xaxis[5] = {0,50, 100, 150, 200};
+		double xaxis[5] = {0,50, 100, 150, 200};//实性联通区域的体积直方图的x轴
 		vector<double> xAxis(xaxis, xaxis + 5);
-		SolidVolumeHistogram = getSolidVolumeHistogram(SolidConnectVolumeProperty, xAxis);
+		solidVolumeHistogram = getSolidVolumeHistogram(solidConnectVolumeProperty, xAxis);
 
 
 		resize3D(solid, resizedDst, dxVoxel, dyVoxel, dzVoxel);
 		volSolid = volume(resizedDst, 1);
 		solidPercent = volSolid / (vol + 0.0001);
 		int solidCon_num = useLabel.size();//实性联通区域个数
-
-
 		vector<int> countedPixel;
 		for (int i = setzMin; i <= setzMax; i++){
 			int pixel;
@@ -444,6 +445,8 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		//det.SetImg(CTImgs[(setzMin + setzMax) / 2], rect, path, (setzMin + setzMax) / 2, filename.size());
 		//det.NoduleSeg();//分割方框内结节
 		double guanghuandu = 0, yuandu = 0;
+		int lobulationNum = 0;//分叶数量
+		vector<double> lobulation;//分叶值
 		cv::Mat featureImg = img3D[(setzMin + setzMax) / 2 - zMin];
 		cv::Mat featureMap = NoduleTag_Res[(setzMin + setzMax) / 2 - zMin];
 		feature2D(featureImg, featureMap, NoduleFeature);
@@ -451,6 +454,7 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		NoduleFeature.maxDiameterZ = dzVoxel*(setzMax - setzMin);
 		guanghuandu = NoduleFeature.ratio_open;//光滑度
 		yuandu = NoduleFeature.M1;//圆度
+		lobulation = getLobulation(featureMap, lobulationNum);
 		//封装返回对象
 
 		jclass nodulesInfo_cls = env->FindClass("com/navitek/jni/NoduleInfo");
@@ -499,6 +503,18 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		jmethodID setNoduleInside_methodID = env->GetMethodID(nodulesInfo_cls, "setNoduleInside", "(Z)V");
 		jmethodID setNodulePosition_methodID = env->GetMethodID(nodulesInfo_cls, "setNodulePosition", "(I)V");
 		*/
+		/*结节圆度，光滑度，分叶数量，分叶值，实性联通分支的离散程度（圆度前面已经定义是setRoundness）
+		jmethodID setSmoothness_methodID = env->GetMethodID(nodulesInfo_cls, "setSmoothness", "(F)V");
+		jmethodID setLobulationNum_methodID = env->GetMethodID(nodulesInfo_cls, "setLobulationNum", "(I)V");
+		jmethodID setSolidDiversity_methodID = env->GetMethodID(nodulesInfo_cls, "setSolidDiversity", "(I)V");
+		jmethodID setLobulation_methodID = env->GetMethodID(nodulesInfo_cls, "setLobulation", "([F)V");
+		*/
+		/*每个实性联通区域的meanhu,stdHU(二维数组),每个实性联通区域的体积,实性联通区域的体积直方图
+		jmethodID setSolidConnectHu_methodID = env->GetMethodID(nodulesInfo_cls, "setSolidConnectHu", "([L/java/lang/objects;)V");
+		jmethodID setSolidConnectVolume_methodID = env->GetMethodID(nodulesInfo_cls, "setSolidConnectVolume", "([F)V");
+		jmethodID setSolidVolumeHistogram_methodID = env->GetMethodID(nodulesInfo_cls, "setSolidVolumeHistogram", "([I)V");
+		*/
+
 
 		
 
@@ -525,6 +541,18 @@ JNIEXPORT jobject JNICALL Java_com_navitek_jni_RoiNoduleDetection_SemiAutoLungNo
 		/* 结节是否在肺壁，和具体位置，左上右上左下右下
 		env->CallVoidMethod(nodulesInfo_cls_tmp, setNoduleInside_methodID, NoduleInside);
 		env->CallVoidMethod(nodulesInfo_cls_tmp, setNodulePosition_methodID, NodulePosition);
+		*/
+		/*结节圆度，光滑度，分叶数量，分叶值，实性联通分支的离散程度（圆度前面已经定义是setRoundness）
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setRoundness_methodID, yuandu);
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setSmoothness_methodID, guanghuandu);
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setLobulationNum_methodID, lobulationNum);
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setSolidDiversity_methodID, solidDiversity);
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setLobulation_methodID, vector2jdoubleArray(env,Lobulation));		
+		*/
+		/*每个实性联通区域的meanhu,stdHU（二维数组）,每个实性联通区域的体积,实性联通区域的体积直方图
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setSolidConnectHu_methodID, vector2objectArray(env,solidConnectHuProperty));
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setSolidConnectVolume_methodID, vector2jdoubleArray(env,solidConnectVolumeProperty));
+		env->CallVoidMethod(nodulesInfo_cls_tmp, setSolidVolumeHistogram_methodID, vector2jintArray(env,solidVolumeHistogram));
 		*/
 
 
@@ -576,5 +604,53 @@ char * JStringToCharArray(JNIEnv * pJNIEnv, jstring jstr)
 
 	str[size] = 0;
 	return str;
+}
+
+jdoubleArray vector2jdoubleArray(JNIEnv * env,vector<double> vec){
+	int length = vec.size();
+	double *temp = new double[length];
+	jdoubleArray darr = env->NewDoubleArray(length);
+	for (int i = 0; i < length; i++){
+		temp[i] = vec[i];
+	}
+	env->SetDoubleArrayRegion(darr, 0, length, temp);
+	return darr;
+}
+
+jintArray vector2jintArray(JNIEnv * env, vector<int> vec){
+	int length = vec.size();
+	jint *temp = new jint[length];
+	jintArray iarr = env->NewIntArray(length);
+	for (int i = 0; i < length; i++){
+		temp[i] = vec[i];
+	}
+	env->SetIntArrayRegion(iarr, 0, length, temp);
+	return iarr;
+}
+jobjectArray vector2objectArray(JNIEnv * env, vector<vector<double>> vec){
+	jobjectArray objArray;
+	jclass doubleArrCls = env->FindClass("[F");
+	if (doubleArrCls == NULL) return NULL;
+	int size = vec.size();
+	objArray = env->NewObjectArray(size, doubleArrCls, NULL);
+	if (objArray == NULL) return NULL;
+	for (int i = 0; i < size; i++)  {
+		jdouble tmp[256]; /* make sure it is large enough! */
+		int j;
+		//3.构建一个int数组类型的对象  
+		int size2 = vec[i].size();
+		jdoubleArray iarr = env->NewDoubleArray(size2);
+		if (iarr == NULL) return NULL; /* out of memory error thrown */
+		for (j = 0; j < size2; j++) { //给tmp数组随便赋个值  
+			tmp[j] = vec[i][j];
+		}
+		//4.给int数组对象赋值,0起始位置,size大小,tmp表示数据源  
+		env->SetDoubleArrayRegion(iarr, 0, size2, tmp);
+		//5.给obj类型数组赋值，只能一个一个的赋值  
+		env->SetObjectArrayElement(objArray, i, iarr);
+		//6.释放局部对象引用  
+		env->DeleteLocalRef(iarr);
+	}
+	return objArray;
 }
 

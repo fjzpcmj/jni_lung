@@ -1832,9 +1832,9 @@ void arrrayToMat(jint* arrray, vector<cv::Mat> &output, int roix, int roiy, int 
 }
 
 double  CalEntropy3D(vector<cv::Mat> &src, vector<cv::Mat> &mask){
-	if (src.size() < 3){
-		return -1;
-	}
+	//if (src.size() < 3){
+	//	return -1;
+	//}
 	double N = 0;
 	cv::Mat times;
 	cv::Mat ori, mas;
@@ -1886,7 +1886,7 @@ void Bin3DMorphologyErode(vector<cv::Mat> &src, vector<cv::Mat> &dst){
 	if (src.size() < kernel){//如果三维腐蚀会全空的话，退而求其次，求二维腐蚀
 		for (int i = 0; i < src.size(); i++){
 			cv::Mat out;
-			erode(src[i], out, NULL);//NULL时，表示的是使用参考点位于中心3x3的核。
+			erode(src[i], out, cv::Mat());
 			dst.push_back(out);
 		}
 		return;
@@ -1943,10 +1943,10 @@ void Bin3DMorphologyDialate(vector<cv::Mat> &src, vector<cv::Mat> &dst){
 	//if (zMax == 0){
 	//	return;
 	//}
-	if (src.size() < kernel){//如果三维腐蚀会全空的话，退而求其次，求二维腐蚀
+	if (src.size() < kernel){
 		for (int i = 0; i < src.size(); i++){
 			cv::Mat out;
-			cv::erode(src[i], out, NULL);//NULL时，表示的是使用参考点位于中心3x3的核。
+			cv::dilate(src[i], out, cv::Mat());
 			dst.push_back(out);
 		}
 		return;
@@ -2434,4 +2434,57 @@ vector<int> getSolidVolumeHistogram(vector<double> solidConnectVolumeProperty, v
 		}
 	}
 	return volumeHistogram;
+}
+
+vector<double> getLobulation(cv::Mat mask, int &output){
+	vector<double> lobulationValue;
+	vector<vector<cv::Point> > contours;
+	vector<cv::Vec4i> hierarchy;
+	cv::findContours(mask.clone(), contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+	int maxArea = 0;
+	int contouridx = 0;
+	vector<cv::Point>  maxcontours;
+	for (int i = 0; i< contours.size(); i++)
+	{
+		int area = cv::contourArea(contours[i]);
+		if (area>maxArea){
+			contouridx = i;
+			maxArea = area;
+		}
+	}
+	maxcontours = contours[contouridx];
+	vector<cv::Point> hull;
+	// Int type hull
+	vector<int> hullsI;
+	// Convexity defects
+	vector<cv::Vec4i> defects;
+	cv::convexHull(cv::Mat(maxcontours), hull, false);
+	//imshow("convex", Mat(hull));
+	//imshow("contours", Mat(maxcontours));
+	// find int type hull
+	cv::convexHull(cv::Mat(maxcontours), hullsI, true);
+	// get convexity defects
+	cv::convexityDefects(cv::Mat(maxcontours), hullsI, defects);
+	output = 0;
+	for (int j = 0; j < defects.size(); j++){
+		int startidx = defects[j][0];
+		cv::Point ptStart(maxcontours[startidx]);
+		int endidx = defects[j][1];;
+		cv::Point ptEnd(maxcontours[endidx]);
+		double fardistance = defects[j][3] / 256.0;
+		int indexdistance;
+		if (endidx>startidx){
+			indexdistance = endidx - startidx;
+		}
+		else{
+			indexdistance = endidx + maxcontours.size() - startidx;
+		}
+		if (indexdistance>4){
+			double thr = fardistance / sqrt(pow(ptEnd.x - ptStart.x, 2) + pow(ptEnd.y - ptStart.y, 2));
+			lobulationValue.push_back(thr);
+			output++;
+		}
+
+	}
+	return lobulationValue;
 }

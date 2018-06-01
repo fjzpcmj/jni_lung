@@ -100,6 +100,7 @@ vector<vector<double>> getSolidConnectHuDiversityProperty(vector<cv::Mat>& conne
 vector<double> getSolidConnectVolumeProperty(vector<cv::Mat>& connectLabel, vector<int> &useLabel,
 	double dxVoxel, double dyVoxel, double dzVoxel);
 vector<int> getSolidVolumeHistogram(vector<double> solidConnectVolumeProperty, vector<double> xAxis);
+vector<double> getLobulation(cv::Mat mask,int &output);
 
 
 class Lungdetection{
